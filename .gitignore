@@ -14,7 +14,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -81,6 +80,9 @@ target/
 profile_default/
 ipython_config.py
 
+#PyCharm
+.idea
+
 # pyenv
 .python-version
 
@@ -127,3 +129,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# outputs
+gas_data
+fx_data
