@@ -46,7 +46,7 @@ def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_star
         click.BadArgumentUsage(f"Неверный уровень логгинга: {level}")
 
     # Define local logger to separate output to files on commands level
-    cli_log_init('GasDB', 'cli_common', debug, log_level, log_path)
+    cli_log_init('GasDB', 'eikon_loader', debug, log_level, log_path)
 
     # Define dates range
     if backoff is not None:
