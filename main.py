@@ -24,10 +24,13 @@ from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
               type=click.DateTime(formats={'%d.%m.%Y'}), required=False, default=None)
 @click.option('--retry', '-r', help="Количество повторов при запросе данных, по умолчанию 5",
               type=click.INT, required=False, default=5)
-@click.option('--delay', '-d', help="Ожидание между повторными запросами, в секундах. По умолчанию 15 с.",
+@click.option('--retry-delay', '-rd', help="Ожидание между повторными запросами, в секундах. По умолчанию 15 с.",
               type=click.INT, required=False, default=15)
+@click.option('--ric-delay', '-ricd',
+              help="Ожидание между запросами разных инструментов, в секундах. По умолчанию 2 с.",
+              type=click.INT, required=False, default=2)
 def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_start: datetime, date_end: datetime,
-                 retry: int, delay: int) -> None:
+                 retry: int, retry_delay: int, ric_delay: int) -> None:
     # Setting log level
     log_level = None
 
@@ -68,14 +71,15 @@ def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_star
         logging.info(f"Дата начала загрузки                  - {date_start}")
         logging.info(f"Дата окончания загрузки               - {date_end}")
         logging.info(f"Количество повторов                   - {retry}")
-        logging.info(f"Ожидание между повторными запросами   - {delay} секунд")
+        logging.info(f"Ожидание между повторными запросами   - {retry_delay} секунд")
+        logging.info(f"Ожидание между разными запросами      - {ric_delay} секунд")
 
     # Start TR Eikon and log in
     launch_eikon()
 
     # Get required data
     try:
-        retrieve_data(date_start, date_end, retry, delay)
+        retrieve_data(date_start, date_end, retry, retry_delay, ric_delay)
     except Exception as err:
         logging.error(f'Неизвестная ошибка при выгрузке и отправке данных.\n'
                       f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n'

@@ -84,8 +84,8 @@ def send_email(attachment: Optional[str], subject: str, error_list: Optional[lis
 
         if error_list is not None and error_list.__len__() > 0:
             error_message = f"Приветствую!\n\nПри загрузке и отправке данных произошли следующие ошибки:" \
-                f"\n{eol.join(error_list)}\n\n" \
-                f"Искренне Ваш, ИИ."
+                            f"\n{eol.join(error_list)}\n\n" \
+                            f"Искренне Ваш, ИИ."
 
             # Compose message
             err_msg = MIMEMultipart()
@@ -204,7 +204,8 @@ def fx_rates_timeseries(ric: str, start_date: str, end_date: str) -> pd.DataFram
     return df
 
 
-def gas_price_timeseries(ric: str, details: dict, fields: list, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+def gas_price_timeseries(ric: str, details: dict, fields: list, start_date: str, end_date: str) -> Optional[
+    pd.DataFrame]:
     interval = gas_interval
     logging.debug(f"ek.get_data({ric}, ['CF_CURR', 'LOTSZUNITS'])[0]")
     _curr_lot = ek.get_data(ric, ['CF_CURR', 'LOTSZUNITS'])[0]
@@ -255,11 +256,12 @@ def gas_price_timeseries(ric: str, details: dict, fields: list, start_date: str,
     return df
 
 
-def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, delay: int) -> None:
+def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, retry_delay: int, ric_delay: int) -> None:
     logging.info("Выгружаю курсы валют...")
     error_list = []
     rates = {}
     for ric in fx_rates_rics:
+        time.sleep(ric_delay)
         for _ in range(retry):
             logging.info(f"Получение данных для {ric}, попытка #{_} из {retry}.")
             try:
@@ -271,11 +273,13 @@ def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, de
                     error_list.append(f"Не удалось получить данные для курса {ric}!")
                 break
             except ek.eikonError.EikonError as err:
-                if err.message == f'{ric}: No data available for the requested date range | ':
+                if err.message == f'{ric}: No data available for the requested date range | ' or \
+                        err.message == 'Error code 400 | Backend error. 400 Bad Request':
                     break
+
                 if err.message == 'UDF Core request failed. Gateway Time-out':
                     # Wait and try again
-                    time.sleep(delay)
+                    time.sleep(retry_delay)
                 else:
                     err_msg = f"Что-то пошло не так при загрузке курса {ric}!"
                     logging.error(err_msg)
@@ -295,7 +299,7 @@ def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, de
 
         # Saving merged data to disk
         file_path = f'{fx_rates_folder}/fx_rates_{date_range}' \
-            f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
+                    f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
         quotes_to_save.to_csv(file_path)
         logging.info(f"Все курсы валют за период {date_range} были сохранёны в '{file_path}'.")
 
@@ -309,12 +313,13 @@ def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, de
     send_email(file_path, fx_rates_mail_subject.substitute(date=date_range), error_list)
 
 
-def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, delay: int) -> None:
+def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, retry_delay: int, ric_delay: int) -> None:
     logging.info("Выгружаю цены на газ...")
     error_list = []
     prices = {}
     # Iterate over all rics and save data into CSV files
     for ric, details in gas_rics.items():
+        time.sleep(ric_delay)
         for _ in range(retry):
             logging.info(f"Получение данных для {ric}, попытка #{_} из {retry}.")
             try:
@@ -326,11 +331,12 @@ def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, 
                     error_list.append(f"Не удалось получить данные для цены {ric}!")
                 break
             except ek.eikonError.EikonError as err:
-                if err.message == f'{ric}: No data available for the requested date range | ':
+                if err.message == f'{ric}: No data available for the requested date range | ' or \
+                        err.message == 'Error code 400 | Backend error. 400 Bad Request':
                     break
                 if err.message == 'UDF Core request failed. Gateway Time-out':
                     # Wait and try again
-                    time.sleep(delay)
+                    time.sleep(retry_delay)
                 else:
                     err_msg = f"Что-то пошло не так при загрузке цены {ric}!"
                     logging.error(err_msg)
@@ -350,7 +356,7 @@ def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, 
 
         # Saving merged data to disk
         file_path = f'{gas_prices_folder}/prices_{date_range}' \
-            f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
+                    f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
         quotes_to_save.to_csv(file_path)
         logging.info(f"Все цены за период {date_range} были сохранёны в '{file_path}'.")
 
@@ -364,7 +370,7 @@ def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, 
     send_email(file_path, gas_prices_mail_subject.substitute(date=date_range), error_list)
 
 
-def retrieve_data(start_date: datetime.datetime, end_date: datetime.datetime, retry: int, delay: int) -> None:
+def retrieve_data(start_date: datetime.datetime, end_date: datetime.datetime, retry: int, retry_delay: int, ric_delay: int) -> None:
     connect_eikon()
 
     start_date = start_date.strftime(_EIKON_DATE_FORMAT)
@@ -375,6 +381,6 @@ def retrieve_data(start_date: datetime.datetime, end_date: datetime.datetime, re
     else:
         date_range = start_date + ' - ' + end_date
 
-    get_fx_rates(start_date, end_date, date_range, retry, delay)
+    get_fx_rates(start_date, end_date, date_range, retry, retry_delay, ric_delay)
 
-    get_gas_prices(start_date, end_date, date_range, retry, delay)
+    get_gas_prices(start_date, end_date, date_range, retry, retry_delay, ric_delay)
