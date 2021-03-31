@@ -13,15 +13,21 @@ from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
 @click.option('--log-path', '-p', 'log_path', type=click.Path(exists=True), default='./logs',
               help="Путь публикации файлов журналирования")
 @click.option('--debug/--no-debug', default=False, help='Работа в режиме отладки (в т.ч. вывод в консоль)')
-@click.option('--backoff', help="Отступ от текущей даты для определения даты загрузки. "
-                                "Значение 1 означает 'вчера'.\n"
-                                "Даты начала и окончания загрузки будут проигнорированы.",
+@click.option('--backoff', '-b', help="Отступ от текущей даты для определения даты загрузки. "
+                                      "Значение 1 означает 'вчера'.\n"
+                                      "Даты начала и окончания загрузки будут проигнорированы.",
               type=click.INT, required=False, default=None)
-@click.option('--date-start', help="Дата начала загрузки.",
+@click.option('--date-start', '-ds', help="Дата начала загрузки.",
               type=click.DateTime(formats={'%d.%m.%Y'}), required=False, default=None)
-@click.option('--date-end', help="Дата окончания загрузки, если не указана, то обрабатываются записи с датой начала.",
+@click.option('--date-end', '-de', help="Дата окончания загрузки, если не указана, "
+                                        "то обрабатываются записи с датой начала.",
               type=click.DateTime(formats={'%d.%m.%Y'}), required=False, default=None)
-def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_start: datetime, date_end: datetime):
+@click.option('--retry', '-r', help="Количество повторов при запросе данных, по умолчанию 5",
+              type=click.INT, required=False, default=5)
+@click.option('--delay', '-d', help="Ожидание между повторными запросами, в секундах. По умолчанию 15 с.",
+              type=click.INT, required=False, default=15)
+def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_start: datetime, date_end: datetime,
+                 retry: int, delay: int) -> None:
     # Setting log level
     log_level = None
 
@@ -57,12 +63,19 @@ def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_star
         logging.error(f"Неожиданный случай! backoff = {backoff}, date-start = {date_start}, date-end = {date_end}.")
         exit(-1)
 
+    if debug:
+        logging.info(f"Путь публикации файлов журналирования - {log_path}")
+        logging.info(f"Дата начала загрузки                  - {date_start}")
+        logging.info(f"Дата окончания загрузки               - {date_end}")
+        logging.info(f"Количество повторов                   - {retry}")
+        logging.info(f"Ожидание между повторными запросами   - {delay} секунд")
+
     # Start TR Eikon and log in
     launch_eikon()
 
     # Get required data
     try:
-        retrieve_data(date_start, date_end)
+        retrieve_data(date_start, date_end, retry, delay)
     except Exception as err:
         logging.error(f'Неизвестная ошибка при выгрузке и отправке данных.\n'
                       f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n'

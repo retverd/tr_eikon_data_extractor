@@ -34,7 +34,7 @@ _GAS_VOL_NAME = 'VOLUME'
 _DEF_UNIT = 'MWh'
 
 gas_fields = ['HIGH', 'LOW', 'OPEN', 'CLOSE', 'VOLUME']
-gas_folder = 'gas_data'
+gas_prices_folder = 'gas_data'
 gas_interval = 'daily'
 gas_prices_mail_subject = Template("Цены на газ за $date")
 
@@ -84,8 +84,8 @@ def send_email(attachment: Optional[str], subject: str, error_list: Optional[lis
 
         if error_list is not None and error_list.__len__() > 0:
             error_message = f"Приветствую!\n\nПри загрузке и отправке данных произошли следующие ошибки:" \
-                            f"\n{eol.join(error_list)}\n\n" \
-                            f"Искренне Ваш, ИИ."
+                f"\n{eol.join(error_list)}\n\n" \
+                f"Искренне Ваш, ИИ."
 
             # Compose message
             err_msg = MIMEMultipart()
@@ -173,22 +173,12 @@ def close_eikon():
     os.system("taskkill /f /im  Eikon.exe")
 
 
-def fx_rates_timeseries(ric: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-    logging.info(f"Выгружаю данные по {ric}.")
+def fx_rates_timeseries(ric: str, start_date: str, end_date: str) -> pd.DataFrame:
     logging.debug(f"ek.get_timeseries({[ric]}, {fx_rates_ts_fields}, start_date={start_date}, end_date = {end_date},"
                   f"interval={fx_rates_ts_interval})")
     # Get time series part of required information
-    try:
-        df = ek.get_timeseries([ric], fx_rates_ts_fields, start_date=start_date, end_date=end_date,
-                               interval=fx_rates_ts_interval)
-    except ek.eikonError.EikonError as err:
-        if err.message == f'{ric}: No data available for the requested date range | ':
-            return
-        else:
-            raise err
-    except Exception as ex:
-        logging.error(ex.__cause__)
-        raise ex
+    df = ek.get_timeseries([ric], fx_rates_ts_fields, start_date=start_date, end_date=end_date,
+                           interval=fx_rates_ts_interval)
 
     # Convert index to string to append columns further
     df.index = df.index.strftime(_EIKON_DATE_FORMAT)
@@ -201,13 +191,15 @@ def fx_rates_timeseries(ric: str, start_date: str, end_date: str) -> Optional[pd
             logging.debug(f"ek.get_data({[ric]}, {data_fields})")
             date_df, err = ek.get_data([ric], data_fields)
         except Exception as err:
-            # TODO: test this section
             logging.error(err)
             raise err
-        date_df['Date'] = date_df['Date'].str[:10]
-        date_df.set_index('Date', inplace=True)
-        date_df.drop(['Instrument'], axis=1, inplace=True)
-        df = pd.merge(df, date_df, left_index=True, right_index=True, how="outer")
+        if date_df["Date"].count() > 0:
+            date_df['Date'] = date_df['Date'].str[:10]
+            date_df.set_index('Date', inplace=True)
+            date_df.drop(['Instrument'], axis=1, inplace=True)
+            df = pd.merge(df, date_df, left_index=True, right_index=True, how="outer")
+        else:
+            logging.warning(f"Для {ric} нет данных {field}")
 
     return df
 
@@ -263,28 +255,39 @@ def gas_price_timeseries(ric: str, details: dict, fields: list, start_date: str,
     return df
 
 
-def get_fx_rates(start_date: str, end_date: str, date_range: str) -> None:
+def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, delay: int) -> None:
     logging.info("Выгружаю курсы валют...")
     error_list = []
     rates = {}
     for ric in fx_rates_rics:
-        try:
-            # FIXME: test with backoff = 0
-            quotes = fx_rates_timeseries(ric, start_date, end_date)
-            if quotes is not None:
-                # Add data to the dictionary
-                rates[ric] = quotes
-            else:
-                error_list.append(f"Не удалось получить данные для курса {ric}!")
-        except ek.eikonError.EikonError:
-            logging.error(f"Что-то пошло не так при загрузке курса {ric}!")
-            error_list.append(f"Что-то пошло не так при загрузке курса {ric}!")
-        except Exception as err:
-            # FIXME: Can only use .str accessor with string values!
-            logging.error("Не удалось получить данные по курсу {ric}! " + err.__str__())
-            error_list.append(f"Не удалось получить данные для курса {ric}!")
+        for _ in range(retry):
+            logging.info(f"Получение данных для {ric}, попытка #{_} из {retry}.")
+            try:
+                quotes = fx_rates_timeseries(ric, start_date, end_date)
+                if quotes is not None:
+                    # Add data to the dictionary
+                    rates[ric] = quotes
+                else:
+                    error_list.append(f"Не удалось получить данные для курса {ric}!")
+                break
+            except ek.eikonError.EikonError as err:
+                if err.message == f'{ric}: No data available for the requested date range | ':
+                    break
+                if err.message == 'UDF Core request failed. Gateway Time-out':
+                    # Wait and try again
+                    time.sleep(delay)
+                else:
+                    err_msg = f"Что-то пошло не так при загрузке курса {ric}!"
+                    logging.error(err_msg)
+                    error_list.append(err_msg)
+                    break
+            except Exception as err:
+                err_msg = "Не удалось получить данные по курсу {ric}! " + err.__str__()
+                logging.error(err_msg)
+                error_list.append(err_msg)
+                break
 
-    if rates.__len__() > 0:
+    if rates:
         # Merging data into one DataFrame
         quotes_to_save = pd.concat(rates)
         quotes_to_save.index.names = ['ric', 'Data']
@@ -292,7 +295,7 @@ def get_fx_rates(start_date: str, end_date: str, date_range: str) -> None:
 
         # Saving merged data to disk
         file_path = f'{fx_rates_folder}/fx_rates_{date_range}' \
-                    f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
+            f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
         quotes_to_save.to_csv(file_path)
         logging.info(f"Все курсы валют за период {date_range} были сохранёны в '{file_path}'.")
 
@@ -306,36 +309,48 @@ def get_fx_rates(start_date: str, end_date: str, date_range: str) -> None:
     send_email(file_path, fx_rates_mail_subject.substitute(date=date_range), error_list)
 
 
-def get_gas_prices(start_date: str, end_date: str, date_range: str) -> None:
+def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, delay: int) -> None:
     logging.info("Выгружаю цены на газ...")
     error_list = []
     prices = {}
     # Iterate over all rics and save data into CSV files
     for ric, details in gas_rics.items():
-        try:
-            quotes = gas_price_timeseries(ric, details, gas_fields, start_date, end_date)
-            if quotes is not None:
-                # Add data to the dictionary
-                prices[ric] = quotes
-            else:
-                error_list.append(f"Не удалось получить данные для цены {ric}!")
-        except ek.eikonError.EikonError:
-            logging.error(f"Что-то пошло не так при загрузке цены {ric}!")
-            error_list.append(f"Что-то пошло не так при загрузке цены {ric}!")
-        except Exception as err:
-            # FIXME: Can only use .str accessor with string values!
-            logging.error("Не удалось получить данные по цене {ric}! " + err.__str__())
-            error_list.append(f"Не удалось получить данные для цены {ric}!")
+        for _ in range(retry):
+            logging.info(f"Получение данных для {ric}, попытка #{_} из {retry}.")
+            try:
+                quotes = gas_price_timeseries(ric, details, gas_fields, start_date, end_date)
+                if quotes is not None:
+                    # Add data to the dictionary
+                    prices[ric] = quotes
+                else:
+                    error_list.append(f"Не удалось получить данные для цены {ric}!")
+                break
+            except ek.eikonError.EikonError as err:
+                if err.message == f'{ric}: No data available for the requested date range | ':
+                    break
+                if err.message == 'UDF Core request failed. Gateway Time-out':
+                    # Wait and try again
+                    time.sleep(delay)
+                else:
+                    err_msg = f"Что-то пошло не так при загрузке цены {ric}!"
+                    logging.error(err_msg)
+                    error_list.append(err_msg)
+                    break
+            except Exception as err:
+                err_msg = "Не удалось получить данные по цене {ric}! " + err.__str__()
+                logging.error(err_msg)
+                error_list.append(err_msg)
+                break
 
-    if prices.__len__() > 0:
+    if prices:
         # Merging data into one DataFrame
         quotes_to_save = pd.concat(prices)
         quotes_to_save.index.names = ['ric', 'Data']
         quotes_to_save = quotes_to_save.swaplevel(0, 1)
 
         # Saving merged data to disk
-        file_path = f'{fx_rates_folder}/prices_{date_range}' \
-                    f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
+        file_path = f'{gas_prices_folder}/prices_{date_range}' \
+            f'_{datetime.datetime.now().strftime(_SAVE_TIMESTAMP_FORMATTER)}.csv'
         quotes_to_save.to_csv(file_path)
         logging.info(f"Все цены за период {date_range} были сохранёны в '{file_path}'.")
 
@@ -349,7 +364,7 @@ def get_gas_prices(start_date: str, end_date: str, date_range: str) -> None:
     send_email(file_path, gas_prices_mail_subject.substitute(date=date_range), error_list)
 
 
-def retrieve_data(start_date: datetime.datetime, end_date: datetime.datetime) -> None:
+def retrieve_data(start_date: datetime.datetime, end_date: datetime.datetime, retry: int, delay: int) -> None:
     connect_eikon()
 
     start_date = start_date.strftime(_EIKON_DATE_FORMAT)
@@ -360,6 +375,6 @@ def retrieve_data(start_date: datetime.datetime, end_date: datetime.datetime) ->
     else:
         date_range = start_date + ' - ' + end_date
 
-    get_fx_rates(start_date, end_date, date_range)
+    get_fx_rates(start_date, end_date, date_range, retry, delay)
 
-    get_gas_prices(start_date, end_date, date_range)
+    get_gas_prices(start_date, end_date, date_range, retry, delay)
