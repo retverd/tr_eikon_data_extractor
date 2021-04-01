@@ -294,7 +294,7 @@ def get_fx_rates(start_date: str, end_date: str, date_range: str, retry: int, re
     if rates:
         # Merging data into one DataFrame
         quotes_to_save = pd.concat(rates)
-        quotes_to_save.index.names = ['ric', 'Data']
+        quotes_to_save.index.names = ['ric', 'Date']
         quotes_to_save = quotes_to_save.swaplevel(0, 1)
 
         # Saving merged data to disk
@@ -351,7 +351,7 @@ def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, 
     if prices:
         # Merging data into one DataFrame
         quotes_to_save = pd.concat(prices)
-        quotes_to_save.index.names = ['ric', 'Data']
+        quotes_to_save.index.names = ['ric', 'Date']
         quotes_to_save = quotes_to_save.swaplevel(0, 1)
 
         # Saving merged data to disk
