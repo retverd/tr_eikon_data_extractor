@@ -338,7 +338,7 @@ def get_gas_prices(start_date: str, end_date: str, date_range: str, retry: int, 
                     # Wait and try again
                     time.sleep(retry_delay)
                 else:
-                    err_msg = f"Что-то пошло не так при загрузке цены {ric}!"
+                    err_msg = f"Что-то пошло не так при загрузке цены {ric}! " + err.__str__()
                     logging.error(err_msg)
                     error_list.append(err_msg)
                     break
