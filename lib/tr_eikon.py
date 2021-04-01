@@ -23,7 +23,7 @@ from lib.env import get_env
 _EIKON_PATH = r'C:\Program Files (x86)\Thomson Reuters\Eikon\Eikon.exe'
 _EIKON_DATE_FORMAT = '%Y-%m-%d'
 _SAVE_TIMESTAMP_FORMATTER = '%Y-%m-%dT%H-%M-%S'
-_SPLASH_SCREEN_TITLE = 'THOMSON REUTERS EIKON'
+_SPLASH_SCREEN_TITLE = get_env('EIKON_SPLASH_SCREEN_TITLE')
 _TOOLBAR_TITLE = 'Eikon Toolbar'
 _RETRIEVE_EIKON_DATA = 'Загрузка данных из TR Eikon'
 _DONE_MSG = 'Готово!'
