@@ -1,9 +1,10 @@
-import logging
 from datetime import date, timedelta, datetime
+from logging import ERROR, WARNING, INFO, DEBUG, getLogger
 
 import click
 
-from lib.logs import cli_log_init
+from lib.email import send_email, MailSubjects
+from lib.logs import log_init
 from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
 
 
@@ -22,8 +23,8 @@ from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
 @click.option('--date-end', '-de', help="Дата окончания загрузки, если не указана, "
                                         "то обрабатываются записи с датой начала.",
               type=click.DateTime(formats={'%d.%m.%Y'}), required=False, default=None)
-@click.option('--retry', '-r', help="Количество повторов при запросе данных, по умолчанию 5",
-              type=click.INT, required=False, default=5)
+@click.option('--retry', '-r', help="Количество повторов при запросе данных, по умолчанию 3",
+              type=click.INT, required=False, default=3)
 @click.option('--retry-delay', '-rd', help="Ожидание между повторными запросами, в секундах. По умолчанию 15 с.",
               type=click.INT, required=False, default=15)
 @click.option('--ric-delay', '-ricd',
@@ -32,21 +33,22 @@ from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
 def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_start: datetime, date_end: datetime,
                  retry: int, retry_delay: int, ric_delay: int) -> None:
     # Setting log level
-    log_level = None
+    log_level = INFO
 
     if level.lower() == "error":
-        log_level = logging.ERROR
+        log_level = ERROR
     elif level.lower() == "warning":
-        log_level = logging.WARNING
+        log_level = WARNING
     elif level.lower() == "info":
-        log_level = logging.INFO
+        log_level = INFO
     elif level.lower() == "debug":
-        log_level = logging.DEBUG
+        log_level = DEBUG
     else:
         click.BadArgumentUsage(f"Неверный уровень логгинга: {level}")
 
     # Define local logger to separate output to files on commands level
-    cli_log_init('GasDB', 'eikon_loader', debug, log_level, log_path)
+    log_init('GasDB', 'eikon_loader', debug, log_level, log_path)
+    logger = getLogger()
 
     # Define dates range
     if backoff is not None:
@@ -54,36 +56,45 @@ def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_star
         date_start = date.today() - timedelta(days=backoff)
         date_end = date_start
     elif date_start is None:
-        logging.error(f"Дата начала загрузки должна быть указана!")
+        logger.error(f"Дата начала загрузки должна быть указана!")
         exit(-1)
     elif date_start is not None and date_end is None:
         date_end = date_start
     elif date_start is not None and date_end is not None:
         if date_end < date_start:
-            logging.error(f"Дата начала обработки не может быть больше даты окончания.")
+            logger.error(f"Дата начала обработки не может быть больше даты окончания.")
             exit(-1)
     else:
-        logging.error(f"Неожиданный случай! backoff = {backoff}, date-start = {date_start}, date-end = {date_end}.")
+        logger.error(f"Неожиданный случай! backoff = {backoff}, date-start = {date_start}, date-end = {date_end}.")
         exit(-1)
 
     if debug:
-        logging.info(f"Путь публикации файлов журналирования - {log_path}")
-        logging.info(f"Дата начала загрузки                  - {date_start}")
-        logging.info(f"Дата окончания загрузки               - {date_end}")
-        logging.info(f"Количество повторов                   - {retry}")
-        logging.info(f"Ожидание между повторными запросами   - {retry_delay} секунд")
-        logging.info(f"Ожидание между разными запросами      - {ric_delay} секунд")
+        logger.info(f"Путь публикации файлов журналирования - {log_path}")
+        logger.info(f"Дата начала загрузки                  - {date_start}")
+        logger.info(f"Дата окончания загрузки               - {date_end}")
+        logger.info(f"Количество повторов                   - {retry}")
+        logger.info(f"Ожидание между повторными запросами   - {retry_delay} секунд")
+        logger.info(f"Ожидание между разными запросами      - {ric_delay} секунд")
 
     # Start TR Eikon and log in
-    launch_eikon()
+    try:
+        launch_eikon()
+    except Exception as err:
+        msg = f'Неожиданная ошибка при запуске терминала.\nОшибка: {err}'
+        logger.error(msg)
+        send_email(None, MailSubjects.get_unk_err_start_eikon(), [msg])
+        exit(-1)
 
     # Get required data
     try:
         retrieve_data(date_start, date_end, retry, retry_delay, ric_delay)
     except Exception as err:
-        logging.error(f'Неизвестная ошибка при выгрузке и отправке данных.\n'
-                      f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n'
-                      f'Ошибка: {err}')
+        msg = f'Неожиданная ошибка при выгрузке и отправке данных.\n' \
+            f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n' \
+            f'Ошибка: {err}'
+        logger.error(msg)
+        send_email(None, MailSubjects.get_unk_err_load_data(), [msg])
+        exit(-1)
 
     # Log off and shutdown TR Eikon
     close_eikon()

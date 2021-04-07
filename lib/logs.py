@@ -5,14 +5,10 @@ from sys import stdout
 LOGS_FORMAT = '[%(asctime)s - %(levelname)s] %(module)s: %(message)s'
 
 
-def cli_log_init(_module_name: str, _filename: str, _debug_flag: bool, _log_level: int, log_path: str,
-                 _logger_name: str = None):
+def log_init(_module_name: str, _filename: str, _debug_flag: bool, _log_level: int, log_path: str) -> None:
     start_msg = Template(f'{_module_name} started in $mode mode!')
 
-    if _logger_name is None:
-        logger = getLogger()
-    else:
-        logger = getLogger(_logger_name)
+    logger = getLogger()
 
     logger.setLevel(_log_level)
 

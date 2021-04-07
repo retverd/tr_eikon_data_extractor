@@ -1,19 +1,18 @@
-import logging
-import os
-import time
+from os import environ
+from time import sleep
 
 
 def get_env(name: str, message: str = None):
-    if name in os.environ:
-        return os.environ[name]
+    if name in environ:
+        return environ[name]
     if message is not None:
         while True:
             value = input(message)
             try:
                 return str(value)
             except ValueError as e:
-                logging.error(e)
-                time.sleep(1)
+                print(e)
+                sleep(1)
     else:
         raise OSError(f'Environment variable {name} is not there')
 
