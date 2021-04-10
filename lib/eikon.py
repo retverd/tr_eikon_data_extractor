@@ -19,7 +19,7 @@ _EIKON_DATE_FORMAT = '%Y-%m-%d'
 _SAVE_TIMESTAMP_FORMATTER = '%Y-%m-%dT%H-%M-%S'
 _SPLASH_SCREEN_TITLE = get_env('EIKON_SPLASH_SCREEN_TITLE')
 _TOOLBAR_TITLE = 'Eikon Toolbar'
-_RETRIEVE_EIKON_DATA = 'Загрузка данных из TR Eikon'
+_RETRIEVE_EIKON_DATA = 'Загрузка данных из Refinitiv Eikon'
 _DONE_MSG = 'Готово!'
 login_timer = 25
 app_timer = 50
@@ -44,7 +44,7 @@ def launch_eikon() -> None:
     eikon_user = get_env('EIKON_USER')
     eikon_pass = get_env('EIKON_PASS')
     # Try to start application (only one instance can be launched so no checks required)
-    logger.info("Запускаю TR Eikon!")
+    logger.info("Запускаю Refinitiv Eikon!")
     Application(backend="uia").start(_EIKON_PATH)
     logger.info("Жду появления формы авторизации...")
     sleep(login_timer)
@@ -71,7 +71,7 @@ def launch_eikon() -> None:
             # Try to connect to splash screen last time. It should not be found due to send keys
             Application(backend="uia").connect(title=_SPLASH_SCREEN_TITLE)
             # If it is found again something is really wrong
-            err_msg = "Не удаётся войти в TR Eikon, требуется анализ!"
+            err_msg = "Не удаётся войти в Refinitiv Eikon, требуется анализ!"
             logger.error(err_msg)
             send_email(None, _RETRIEVE_EIKON_DATA, [err_msg])
             exit(1)
@@ -80,7 +80,7 @@ def launch_eikon() -> None:
     except ElementNotFoundError:
         logger.warning("Форма авторизации не появилась, возможно, вход уже был выполнен!")
 
-    logger.info("Ожидаю загрузки Eikon Desktop...")
+    logger.info("Ожидаю загрузки Refinitiv Eikon Desktop...")
     sleep(app_timer)
     logger.info(_DONE_MSG)
 
@@ -89,7 +89,7 @@ def connect_eikon() -> None:
     logger = getLogger()
     eikon_key = get_env('EIKON_KEY')
 
-    logger.info(f"Подключаюсь к Eikon Proxy...")
+    logger.info(f"Подключаюсь к Refinitiv Eikon Proxy...")
     try:
         # Try to connect
         ek.set_app_key(eikon_key)
@@ -111,7 +111,7 @@ def connect_eikon() -> None:
 
 def close_eikon():
     logger = getLogger()
-    logger.warning("Выключаю Eikon Desktop... Пока не имплементировано!")
+    logger.warning("Выключаю Refinitiv Eikon Desktop... Пока не имплементировано!")
     # FIXME: dirty approach, but works as for now
     system("taskkill /f /im  Eikon.exe")
 

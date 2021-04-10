@@ -1,2 +1,2 @@
-# Thomson Reuters Eikon Data Extractor
-Tool for extracting some data from TR Eikon.
+# Refinitiv Eikon Data Extractor
+Tool for extracting some data from Refinitiv Eikon.

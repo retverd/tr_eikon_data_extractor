@@ -5,10 +5,10 @@ import click
 
 from lib.email import send_email, MailSubjects
 from lib.logs import log_init
-from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
+from lib.eikon import launch_eikon, retrieve_data, close_eikon
 
 
-@click.command(help="Выгрузка данных из Thomson Reuters Eikon и направление на целевой адрес эл. почты")
+@click.command(help="Выгрузка данных из Refinitiv Eikon и направление на целевой адрес эл. почты")
 @click.option('--level', '-l', type=click.Choice(["debug", "info", "warning", "error"]), default="info",
               help='Уровень записи логов')
 @click.option('--log-path', '-p', 'log_path', type=click.Path(exists=True), default='./logs',
