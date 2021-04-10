@@ -13,6 +13,7 @@ from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
               help='Уровень записи логов')
 @click.option('--log-path', '-p', 'log_path', type=click.Path(exists=True), default='./logs',
               help="Путь публикации файлов журналирования")
+@click.option('--get/--no-get', default=False, help='Только получение данных, без запуска и выключения терминала')
 @click.option('--debug/--no-debug', default=False, help='Работа в режиме отладки (в т.ч. вывод в консоль)')
 @click.option('--backoff', '-b', help="Отступ от текущей даты для определения даты загрузки. "
                                       "Значение 1 означает 'вчера'.\n"
@@ -30,8 +31,8 @@ from lib.tr_eikon import launch_eikon, retrieve_data, close_eikon
 @click.option('--ric-delay', '-ricd',
               help="Ожидание между запросами разных инструментов, в секундах. По умолчанию 2 с.",
               type=click.INT, required=False, default=2)
-def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_start: datetime, date_end: datetime,
-                 retry: int, retry_delay: int, ric_delay: int) -> None:
+def eikon_loader(level: str, log_path: str, get: bool, debug: bool, backoff: int, date_start: datetime,
+                 date_end: datetime, retry: int, retry_delay: int, ric_delay: int) -> None:
     # Setting log level
     log_level = INFO
 
@@ -76,14 +77,15 @@ def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_star
         logger.info(f"Ожидание между повторными запросами   - {retry_delay} секунд")
         logger.info(f"Ожидание между разными запросами      - {ric_delay} секунд")
 
-    # Start TR Eikon and log in
-    try:
-        launch_eikon()
-    except Exception as err:
-        msg = f'Неожиданная ошибка при запуске терминала.\nОшибка: {err}'
-        logger.error(msg)
-        send_email(None, MailSubjects.get_unk_err_start_eikon(), [msg])
-        exit(-1)
+    if not get:
+        # Start Refinitiv Eikon and log in
+        try:
+            launch_eikon()
+        except Exception as err:
+            msg = f'Неожиданная ошибка при запуске терминала.\nОшибка: {err}'
+            logger.error(msg)
+            send_email(None, MailSubjects.get_unk_err_start_eikon(), [msg])
+            exit(-1)
 
     # Get required data
     try:
@@ -96,8 +98,9 @@ def eikon_loader(level: str, log_path: str, debug: bool, backoff: int, date_star
         send_email(None, MailSubjects.get_unk_err_load_data(), [msg])
         exit(-1)
 
-    # Log off and shutdown TR Eikon
-    close_eikon()
+    if not get:
+        # Log off and shutdown Refinitiv Eikon
+        close_eikon()
 
 
 if __name__ == '__main__':
