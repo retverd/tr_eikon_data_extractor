@@ -34,8 +34,8 @@ class EikonDataGetter(object):
     def retrieve_data(cls, start_date: str, end_date: str, date_range: str, retry: int, retry_delay: int) -> None:
         logger = getLogger()
         quotes = None
-        for _ in range(1, retry, 1):
-            logger.info(f"Выгружаю {cls.data_name['nom_acc']}, попытка #{_} из {retry}.")
+        for _ in range(1, retry):
+            logger.info(f"Выгружаю {cls.data_name['nom_acc']} за период {date_range}, попытка #{_} из {retry}.")
             try:
                 quotes = cls.get_data(start_date, end_date)
                 break

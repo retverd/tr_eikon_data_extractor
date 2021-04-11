@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date, timedelta, datetime
 from logging import ERROR, WARNING, INFO, DEBUG, getLogger
 from time import sleep
@@ -8,6 +9,33 @@ from lib.eikon_data_getter import FXRateGetter, GasPricesGetter
 from lib.eikon_desktop_handler import EikonDesktop
 from lib.email import send_email, MailSubjects
 from lib.logs import log_init
+
+
+def get_and_send_data(date_start: datetime, date_end: datetime, type_delay: int, retry: int, retry_delay: int) -> None:
+    logger = getLogger()
+    # Prepare dates
+    start_date = date_start.strftime(FXRateGetter.EIKON_DATE_FORMAT)
+    end_date = date_end.strftime(FXRateGetter.EIKON_DATE_FORMAT)
+
+    if start_date == end_date:
+        date_range = start_date
+    else:
+        date_range = start_date + ' - ' + end_date
+
+    try:
+        # Get required data for fx rates
+        FXRateGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
+        sleep(type_delay)
+        # Get required data for gas prices
+        GasPricesGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
+    except Exception as err:
+        msg = f'Неожиданная ошибка при выгрузке и отправке данных.\n' \
+            f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n' \
+            f'Ошибка: {err}'
+        logger.error(msg)
+        send_email(None, MailSubjects.get_unk_err_load_data(), [msg])
+        exit(-1)
+    return
 
 
 @click.command(help="Выгрузка данных из Refinitiv Eikon и направление на целевой адрес эл. почты")
@@ -99,28 +127,14 @@ def eikon_loader(level: str, log_path: str, get: bool, debug: bool, backoff: int
         send_email(None, MailSubjects.get_unk_err_connect_eikon(), [msg])
         exit(-1)
 
-    # Prepare dates
-    start_date = date_start.strftime(FXRateGetter.EIKON_DATE_FORMAT)
-    end_date = date_end.strftime(FXRateGetter.EIKON_DATE_FORMAT)
-
-    if start_date == end_date:
-        date_range = start_date
+    if (date_end - date_start).days > 31:
+        date_end_new = date_start.replace(day=monthrange(date_start.year, date_start.month)[1])
+        while date_start <= date_end:
+            get_and_send_data(date_start, date_end_new, type_delay, retry, retry_delay)
+            date_start = date_end_new + timedelta(days=1)
+            date_end_new = min(date_start.replace(day=monthrange(date_start.year, date_start.month)[1]), date_end)
     else:
-        date_range = start_date + ' - ' + end_date
-
-    try:
-        # Get required data for fx rates
-        FXRateGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
-        sleep(type_delay)
-        # Get required data for gas prices
-        GasPricesGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
-    except Exception as err:
-        msg = f'Неожиданная ошибка при выгрузке и отправке данных.\n' \
-            f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n' \
-            f'Ошибка: {err}'
-        logger.error(msg)
-        send_email(None, MailSubjects.get_unk_err_load_data(), [msg])
-        exit(-1)
+        get_and_send_data(date_start, date_end, type_delay, retry, retry_delay)
 
     if not get:
         # Log off and shutdown Refinitiv Eikon
