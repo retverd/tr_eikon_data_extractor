@@ -16,6 +16,7 @@ class MailSubjects:
     fx_rates = Template("Курсы валют за $date")
     gas_prices = Template("Цены на газ за $date")
     unk_err_start_eikon = "Неожиданная ошибка при запуске терминала"
+    unk_err_connect_eikon = "Неожиданная ошибка при подключении к API Proxy"
     unk_err_load_data = "Неожиданная ошибка при выгрузке и отправке данных"
 
     @staticmethod
@@ -29,6 +30,10 @@ class MailSubjects:
     @staticmethod
     def get_unk_err_start_eikon() -> str:
         return MailSubjects.unk_err_start_eikon
+
+    @staticmethod
+    def get_unk_err_connect_eikon() -> str:
+        return MailSubjects.unk_err_connect_eikon
 
     @staticmethod
     def get_unk_err_load_data() -> str:
@@ -73,7 +78,7 @@ def send_email(attachment: Optional[str], subject: str, error_list: Optional[lis
 
         if error_list is not None and error_list.__len__() > 0:
             error_message = MESSAGE_TEMPLATE.substitute(payload=f"При загрузке и отправке данных произошли следующие "
-            f"ошибки:\n{eol.join(error_list)}")
+                                                                f"ошибки:\n{eol.join(error_list)}")
 
             # Compose message
             err_msg = MIMEMultipart()

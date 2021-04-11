@@ -1,11 +1,13 @@
 from datetime import date, timedelta, datetime
 from logging import ERROR, WARNING, INFO, DEBUG, getLogger
+from time import sleep
 
 import click
 
+from lib.eikon_data_getter import FXRateGetter, GasPricesGetter
+from lib.eikon_desktop_handler import EikonDesktop
 from lib.email import send_email, MailSubjects
 from lib.logs import log_init
-from lib.eikon import launch_eikon, retrieve_data, close_eikon
 
 
 @click.command(help="Выгрузка данных из Refinitiv Eikon и направление на целевой адрес эл. почты")
@@ -28,11 +30,11 @@ from lib.eikon import launch_eikon, retrieve_data, close_eikon
               type=click.INT, required=False, default=3)
 @click.option('--retry-delay', '-rd', help="Ожидание между повторными запросами, в секундах. По умолчанию 15 с.",
               type=click.INT, required=False, default=15)
-@click.option('--ric-delay', '-ricd',
-              help="Ожидание между запросами разных инструментов, в секундах. По умолчанию 2 с.",
+@click.option('--type-delay', '-td',
+              help="Ожидание между запросами разных типов инструментов, в секундах. По умолчанию 2 с.",
               type=click.INT, required=False, default=2)
 def eikon_loader(level: str, log_path: str, get: bool, debug: bool, backoff: int, date_start: datetime,
-                 date_end: datetime, retry: int, retry_delay: int, ric_delay: int) -> None:
+                 date_end: datetime, retry: int, retry_delay: int, type_delay: int) -> None:
     # Setting log level
     log_level = INFO
 
@@ -71,25 +73,47 @@ def eikon_loader(level: str, log_path: str, get: bool, debug: bool, backoff: int
 
     if debug:
         logger.info(f"Путь публикации файлов журналирования - {log_path}")
+        logger.info(f"Запуск и выключение терминала         - {not get}")
         logger.info(f"Дата начала загрузки                  - {date_start}")
         logger.info(f"Дата окончания загрузки               - {date_end}")
         logger.info(f"Количество повторов                   - {retry}")
         logger.info(f"Ожидание между повторными запросами   - {retry_delay} секунд")
-        logger.info(f"Ожидание между разными запросами      - {ric_delay} секунд")
+        logger.info(f"Ожидание между разными запросами      - {type_delay} секунд")
 
     if not get:
         # Start Refinitiv Eikon and log in
         try:
-            launch_eikon()
+            EikonDesktop.launch()
         except Exception as err:
             msg = f'Неожиданная ошибка при запуске терминала.\nОшибка: {err}'
             logger.error(msg)
             send_email(None, MailSubjects.get_unk_err_start_eikon(), [msg])
             exit(-1)
 
-    # Get required data
     try:
-        retrieve_data(date_start, date_end, retry, retry_delay, ric_delay)
+        # Connect to Refinitiv Eikon API Proxy
+        EikonDesktop.connect()
+    except Exception as err:
+        msg = f'Неожиданная ошибка при подключении к API Proxy.\nОшибка: {err}'
+        logger.error(msg)
+        send_email(None, MailSubjects.get_unk_err_connect_eikon(), [msg])
+        exit(-1)
+
+    # Prepare dates
+    start_date = date_start.strftime(FXRateGetter.EIKON_DATE_FORMAT)
+    end_date = date_end.strftime(FXRateGetter.EIKON_DATE_FORMAT)
+
+    if start_date == end_date:
+        date_range = start_date
+    else:
+        date_range = start_date + ' - ' + end_date
+
+    try:
+        # Get required data for fx rates
+        FXRateGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
+        sleep(type_delay)
+        # Get required data for gas prices
+        GasPricesGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
     except Exception as err:
         msg = f'Неожиданная ошибка при выгрузке и отправке данных.\n' \
             f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n' \
@@ -100,7 +124,8 @@ def eikon_loader(level: str, log_path: str, get: bool, debug: bool, backoff: int
 
     if not get:
         # Log off and shutdown Refinitiv Eikon
-        close_eikon()
+        EikonDesktop.close()
+    return
 
 
 if __name__ == '__main__':
