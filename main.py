@@ -25,9 +25,9 @@ def get_and_send_data(date_start: datetime, date_end: datetime, type_delay: int,
     try:
         # Get required data for fx rates
         FXRateGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
-        sleep(type_delay)
+        # sleep(type_delay)
         # Get required data for gas prices
-        GasPricesGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
+        # GasPricesGetter.retrieve_data(start_date, end_date, date_range, retry, retry_delay)
     except Exception as err:
         msg = f'Неожиданная ошибка при выгрузке и отправке данных.\n' \
             f'Дата начала: {date_start:%d.%m.%Y} Дата окончания: {date_end:%d.%m.%Y}.\n' \
