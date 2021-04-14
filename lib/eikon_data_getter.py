@@ -22,6 +22,9 @@ class EikonDataGetter(object):
     file_prefix = ''
     save_timestamp_formatter = '%Y-%m-%dT%H-%M-%S'
     mail_header_getter = None
+    error_messages_retry = ['UDF Core request failed. Gateway Time-out',
+                            'Error code 400 | Backend error. 400 Bad Request',
+                            'Backend error. 400 Bad Request']
 
     ts_interval = 'daily'
     ts_fields = ['HIGH', 'LOW', 'OPEN', 'CLOSE']
@@ -40,10 +43,9 @@ class EikonDataGetter(object):
                 quotes = cls.get_data(start_date, end_date)
                 break
             except ek.eikonError.EikonError as err:
-                if err.message == 'UDF Core request failed. Gateway Time-out' or \
-                        err.message == 'Error code 400 | Backend error. 400 Bad Request':
+                if err.message in cls.error_messages_retry:
                     # Wait and try again
-                    sleep(retry_delay)
+                    sleep(retry_delay * _)
                 else:
                     err_msg = f"Что-то пошло не так при загрузке искомых {cls.data_name['gen']}! Детали: "
                     err_list = err.message.split('|')
