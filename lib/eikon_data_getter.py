@@ -24,7 +24,8 @@ class EikonDataGetter(object):
     mail_header_getter = None
     error_messages_retry = ['UDF Core request failed. Gateway Time-out',
                             'Error code 400 | Backend error. 400 Bad Request',
-                            'Backend error. 400 Bad Request']
+                            'Backend error. 400 Bad Request',
+                            'Backend error. 500 Internal Server Error']
 
     ts_interval = 'daily'
     ts_fields = ['HIGH', 'LOW', 'OPEN', 'CLOSE']
